@@ -217,10 +217,10 @@ typedef struct {
 	int focus;
 
 	/* read block information */
-	int line_padding, block_lines;
+	int line_padding;
 	size_t line_bytes, line;
 	SANE_Byte *block, *ordered_block;
-	size_t block_read_pos;
+	size_t block_read_pos, ordered_block_size;
 	SANE_Byte *ir_data;
 	size_t ir_data_len;
 
@@ -2187,7 +2187,7 @@ SANE_Status sane_ls5000_start(SANE_Handle h)
  * This function does the bulk of the data format conversion,
  * see the comment for sane_ls5000_read.
  */
-static void ls5000_shuffle_block(ls5000_t *s)
+static void ls5000_shuffle_block(ls5000_t *s, int block_lines)
 {
 	int line, i;
 	int line_padded = s->line_bytes + s->line_padding;
@@ -2202,7 +2202,7 @@ static void ls5000_shuffle_block(ls5000_t *s)
 		 * (less data copying) but that just increases code complexity
 		 * for little gain.
 		 */
-		for (line = 0; line < s->block_lines; line++) {
+		for (line = 0; line < block_lines; line++) {
 			uint16_t *src = (uint16_t*)s->block + line*line_padded/2;
 			uint16_t *graydst = (uint16_t*)s->ordered_block + line*line_pixels;
 			uint16_t *irsrc = src + line_pixels;
@@ -2226,7 +2226,7 @@ static void ls5000_shuffle_block(ls5000_t *s)
 		 * data if it is present but also need to rearrange the color
 		 * components.
 		 */
-		for (line = 0; line < s->block_lines; line++) {
+		for (line = 0; line < block_lines; line++) {
 			uint16_t *src = (uint16_t*)s->block + line*line_padded/2;
 			uint16_t *rgbdst = (uint16_t*)s->ordered_block + line*3*line_pixels;
 			uint16_t *irsrc = src + 3*line_pixels;
@@ -2276,7 +2276,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	SANE_Status status;
 	unsigned long xfer_len;
 	size_t n_recv, remaining, offset;
-	int colors;
+	int colors, block_lines;
 
 	*len = 0;
 
@@ -2380,11 +2380,11 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * we probably should adjust this based on line length
 		 * for optimal performance.
 		 */
-		s->block_lines = 10;
-		if (s->block_lines > s->logical_height - s->line)
-			s->block_lines = s->logical_height - s->line;
+		block_lines = 10;
+		if (block_lines > s->logical_height - s->line)
+			block_lines = s->logical_height - s->line;
 		/* calculate how many bytes that means */
-		remaining = s->block_lines * (s->line_bytes + s->line_padding);
+		remaining = block_lines * (s->line_bytes + s->line_padding);
 		/* issue the read command */
 		status = ls5000_issue_cmd(s, -1,
 				LS5000_CMD_READ,
@@ -2440,10 +2440,14 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * This is the hard part, see the comments there
 		 * and at the start of this function.
 		 */
-		ls5000_shuffle_block(s);
+		ls5000_shuffle_block(s, block_lines);
+
+		/* calculate how much data to copy to the frontend */
+		s->ordered_block_size = block_lines * s->logical_width *
+					2 * colors;
 
 		/* we've read a few lines, keep track */
-		s->line += s->block_lines;
+		s->line += block_lines;
 	}
 
 	/*
@@ -2454,7 +2458,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 */
 
 	/* Calculate how much data we still have pending */
-	*len = s->block_lines * colors * s->logical_width * 2 - s->block_read_pos;
+	*len = s->ordered_block_size - s->block_read_pos;
 	/* Too much? */
 	if (*len > maxlen)
 		*len = maxlen;
@@ -2468,7 +2472,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 * this will execute some more code above again to read data
 	 * from the scanner.
 	 */
-	if (s->block_read_pos == s->block_lines * colors * s->logical_width * 2)
+	if (s->block_read_pos == s->ordered_block_size)
 		s->block_read_pos = 0;
 	return SANE_STATUS_GOOD;
 }
