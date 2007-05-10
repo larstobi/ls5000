@@ -73,26 +73,26 @@
 
 #define free(p) free((void*)p)
 
-typedef enum {
+enum ls5000_phase {
 	LS5000_PHASE_NONE = 0x00,
 	LS5000_PHASE_STATUS = 0x01,
 	LS5000_PHASE_OUT = 0x02,
 	LS5000_PHASE_IN = 0x03,
 	LS5000_PHASE_BUSY = 0x04
-} ls5000_phase_t;
+};
 
-typedef enum {
+enum ls5000_scan {
 	LS5000_SCAN_NORMAL,
 	LS5000_SCAN_AE,
 	LS5000_SCAN_AE_WB
-} ls5000_scan_t;
+};
 
-typedef enum {
+enum ls5000_scan_stage {
 	LS5000_SCAN_STAGE_IDLE,
 	LS5000_SCAN_STAGE_ACQUIRE,
-} ls5000_scan_stage_t;
+};
 
-typedef enum {
+enum ls500O_unit_ready {
 	LS5000_ERROR,
 	LS5000_GOOD,
 	LS5000_BECOMING_READY,
@@ -105,17 +105,17 @@ typedef enum {
 	LS5000_UNIT_ATTENTION,
 	LS5000_DATA_PHASE_ERROR,
 	LS5000_OVERLAPPED_CMDS,
-} ls500O_unit_ready_t;
+};
 
-typedef enum {
+enum ls5000_status {
 	LS5000_STATUS_READY,
 	LS5000_STATUS_BUSY,
 	LS5000_STATUS_PROCESSING,
 	LS5000_STATUS_ERROR,
 	LS5000_STATUS_REISSUE,
-} ls5000_status;
+};
 
-typedef enum {
+enum ls5000_option {
 	LS5000_OPTION_NUM = 0,
 
 	/* info options */
@@ -161,7 +161,7 @@ typedef enum {
 
 	/* keep last */
 	LS5000_N_OPTIONS
-} ls5000_option_t;
+};
 
 #define LS5000_CMD_INQUIRY 0x12
 #define LS5000_CMD_TEST_UNIT_READY 0x00
@@ -180,9 +180,9 @@ typedef enum {
 #define LS5000_CMD_SEND 0x2a
 #define LS5000_CMD_ABORT 0xc0
 
-typedef unsigned int ls5000_pixel_t;
+typedef unsigned int ls5000_pixel;
 
-typedef struct {
+struct ls5000 {
 	int fd;
 	SANE_Byte *recv_buf;
 	size_t recv_buf_size;
@@ -202,8 +202,8 @@ typedef struct {
 
 	/* settings */
 	SANE_Bool negative, infrared, preview, pinfrared, gray_scan;
-	ls5000_pixel_t n_lut;
-	ls5000_pixel_t *lut_r, *lut_g, *lut_b, *lut_neutral;
+	ls5000_pixel n_lut;
+	ls5000_pixel *lut_r, *lut_g, *lut_b, *lut_neutral;
 	unsigned long res;
 	unsigned long xmin, xmax, ymin, ymax;
 	int i_frame;
@@ -228,14 +228,14 @@ typedef struct {
 	size_t ir_data_len;
 
 	/* status */
-	ls5000_scan_stage_t scan_stage;
+	enum ls5000_scan_stage scan_stage;
 	unsigned long sense_key, sense_asc, sense_ascq, sense_info;
 	int status;
 	SANE_Bool must_read_now;
 
 	/* SANE stuff */
 	SANE_Option_Descriptor option_list[LS5000_N_OPTIONS];
-} ls5000_t;
+};
 
 static SANE_Device **device_list = NULL;
 static int n_device_list = 0;
@@ -244,7 +244,7 @@ static int open_devices = 0;
 /* command handling */
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
-static ls5000_phase_t ls5000_phase_check(ls5000_t *s)
+static enum ls5000_phase ls5000_phase_check(struct ls5000 *s)
 {
 	static SANE_Byte phase_send_buf[1] = { LS5000_CMD_PHASE_CHECK };
 	SANE_Byte phase_recv_buf[1];
@@ -268,7 +268,7 @@ static ls5000_phase_t ls5000_phase_check(ls5000_t *s)
 		return phase_recv_buf[0];
 }
 
-static SANE_Status ls5000_parse_status(ls5000_t *s)
+static SANE_Status ls5000_parse_status(struct ls5000 *s)
 {
 	if (s->sense_key == 0)
 		DBG(20, "STATUS: GOOD\n\n");
@@ -291,7 +291,7 @@ static SANE_Status ls5000_parse_status(ls5000_t *s)
 	return SANE_STATUS_IO_ERROR;
 }
 
-static SANE_Status ls5000_check_status(ls5000_t *s)
+static SANE_Status ls5000_check_status(struct ls5000 *s)
 {
 	size_t n_status;
 	static SANE_Byte status_buf[8];
@@ -317,7 +317,7 @@ static SANE_Status ls5000_check_status(ls5000_t *s)
 	({ SANE_Byte data[] = {bytes};					\
 	   _ls5000_issue_cmd(s, n_recv, ARRAY_SIZE(data), data);	\
 	})
-static SANE_Status _ls5000_issue_cmd(ls5000_t *s, int n_recv,
+static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
 				     int n_send, SANE_Byte *send_buf)
 {
 	SANE_Status status = SANE_STATUS_INVAL;
@@ -451,7 +451,7 @@ static SANE_Status _ls5000_issue_cmd(ls5000_t *s, int n_recv,
 		return status;
 }
 
-static ls500O_unit_ready_t ls5000_get_status(ls5000_t *s)
+static enum ls500O_unit_ready ls5000_get_status(struct ls5000 *s)
 {
 	int status;
 
@@ -492,7 +492,7 @@ static ls500O_unit_ready_t ls5000_get_status(ls5000_t *s)
 	}
 }
 
-static SANE_Status ls5000_get_error(ls5000_t *s)
+static SANE_Status ls5000_get_error(struct ls5000 *s)
 {
 	int stat = ls5000_get_status(s);
 	switch (stat) {
@@ -524,7 +524,7 @@ static inline void order_values(
 	}
 }
 
-static void ls5000_convert_options(ls5000_t *s)
+static void ls5000_convert_options(struct ls5000 *s)
 {
 	int i_colour, pitch;
 	unsigned long xmin, xmax, ymin, ymax;
@@ -557,12 +557,12 @@ static void ls5000_convert_options(ls5000_t *s)
 			s->real_exposure[i_colour] = 1;
 }
 
-static SANE_Status ls5000_execute(ls5000_t *s)
+static SANE_Status ls5000_execute(struct ls5000 *s)
 {
 	return ls5000_issue_cmd(s, 0, LS5000_CMD_EXECUTE, 0, 0, 0, 0, 0);
 }
 
-static SANE_Status ls5000_eject(ls5000_t *s)
+static SANE_Status ls5000_eject(struct ls5000 *s)
 {
 	SANE_Status status;
 
@@ -582,7 +582,7 @@ static SANE_Status ls5000_eject(ls5000_t *s)
 	return ls5000_execute(s);
 }
 
-static SANE_Status ls5000_focus(ls5000_t *s)
+static SANE_Status ls5000_focus(struct ls5000 *s)
 {
 	SANE_Status status;
 
@@ -606,7 +606,7 @@ static SANE_Status ls5000_focus(ls5000_t *s)
 	return ls5000_execute(s);
 }
 
-static SANE_Status ls5000_autofocus(ls5000_t *s)
+static SANE_Status ls5000_autofocus(struct ls5000 *s)
 {
 	SANE_Status status;
 	int real_focusx, real_focusy, tmo = 15, stat;
@@ -672,7 +672,7 @@ static SANE_Status ls5000_autofocus(ls5000_t *s)
 	return SANE_STATUS_INVAL;
 }
 
-static SANE_Status ls5000_get_exposure(ls5000_t *s)
+static SANE_Status ls5000_get_exposure(struct ls5000 *s)
 {
 	SANE_Status status;
 	int i_colour;
@@ -697,7 +697,7 @@ static SANE_Status ls5000_get_exposure(ls5000_t *s)
 }
 
 
-static SANE_Status ls5000_scan(ls5000_t *s, ls5000_scan_t type)
+static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 {
 	SANE_Status status;
 	int i_colour, n_colour, window, stat, tmo = 15;
@@ -930,7 +930,7 @@ static SANE_Status ls5000_scan(ls5000_t *s, ls5000_scan_t type)
 }
 
 /* use page == -1 to query evpd 0/page 0 */
-static SANE_Status ls5000_page_inquiry(ls5000_t *s, int page)
+static SANE_Status ls5000_page_inquiry(struct ls5000 *s, int page)
 {
 	SANE_Status status;
 	size_t len;
@@ -979,7 +979,7 @@ static SANE_Status ls5000_page_inquiry(ls5000_t *s, int page)
 	return SANE_STATUS_GOOD;
 }
 
-static void ls5000_close(ls5000_t *s)
+static void ls5000_close(struct ls5000 *s)
 {
 	free(s->lut_r);
 	free(s->lut_g);
@@ -993,17 +993,17 @@ static void ls5000_close(ls5000_t *s)
 }
 
 static SANE_Status
-ls5000_open(const char *device, ls5000_t **sp)
+ls5000_open(const char *device, struct ls5000 **sp)
 {
 	SANE_Status status;
-	ls5000_t *s;
+	struct ls5000 *s;
 	char *line;
 	SANE_Device **device_list_new;
 
-	s = malloc(sizeof(ls5000_t));
+	s = malloc(sizeof(struct ls5000));
 	if (!s)
 		return SANE_STATUS_NO_MEM;
-	memset(s, 0, sizeof(ls5000_t));
+	memset(s, 0, sizeof(struct ls5000));
 
 	status = sanei_usb_open(device, &s->fd);
 	if (status) {
@@ -1085,11 +1085,11 @@ ls5000_open(const char *device, ls5000_t **sp)
 	return SANE_STATUS_NO_MEM;
 }
 
-static SANE_Status ls5000_full_inquiry(ls5000_t *s)
+static SANE_Status ls5000_full_inquiry(struct ls5000 *s)
 {
 	SANE_Status status;
 	int pitch, pitch_max, asciilen;
-	ls5000_pixel_t pixel;
+	ls5000_pixel pixel;
 
 	status = ls5000_page_inquiry(s, 0xc1);
 	if (status)
@@ -1099,10 +1099,10 @@ static SANE_Status ls5000_full_inquiry(ls5000_t *s)
 	s->n_lut = 1;
 	s->n_lut <<= s->maxbits;
 	if (s->n_lut > 1) {
-		s->lut_r = realloc(s->lut_r, s->n_lut * sizeof(ls5000_pixel_t));
-		s->lut_g = realloc(s->lut_g, s->n_lut * sizeof(ls5000_pixel_t));
-		s->lut_b = realloc(s->lut_b, s->n_lut * sizeof(ls5000_pixel_t));
-		s->lut_neutral = realloc(s->lut_neutral, s->n_lut * sizeof(ls5000_pixel_t));
+		s->lut_r = realloc(s->lut_r, s->n_lut * sizeof(ls5000_pixel));
+		s->lut_g = realloc(s->lut_g, s->n_lut * sizeof(ls5000_pixel));
+		s->lut_b = realloc(s->lut_b, s->n_lut * sizeof(ls5000_pixel));
+		s->lut_neutral = realloc(s->lut_neutral, s->n_lut * sizeof(ls5000_pixel));
 
 		if (!s->lut_r || !s->lut_g || !s->lut_b || !s->lut_neutral) {
 			free(s->lut_r);
@@ -1182,7 +1182,7 @@ static SANE_Status ls5000_full_inquiry(ls5000_t *s)
 	return SANE_STATUS_GOOD;
 }
 
-static SANE_Status ls5000_load(ls5000_t *s)
+static SANE_Status ls5000_load(struct ls5000 *s)
 {
 	SANE_Status status;
 
@@ -1202,7 +1202,7 @@ static SANE_Status ls5000_load(ls5000_t *s)
 	return ls5000_execute(s);
 }
 
-static SANE_Status ls5000_reset(ls5000_t *s)
+static SANE_Status ls5000_reset(struct ls5000 *s)
 {
 	SANE_Status status;
 
@@ -1228,7 +1228,8 @@ static SANE_Status ls5000_reset(ls5000_t *s)
 
 /* SANE entry points */
 
-SANE_Status sane_ls5000_init(SANE_Int * version_code, SANE_Auth_Callback authorize)
+SANE_Status sane_ls5000_init(SANE_Int * version_code,
+			     SANE_Auth_Callback authorize)
 {
 	(void)authorize; /* shut up compiler */
 	DBG_INIT();
@@ -1261,7 +1262,8 @@ static SANE_Status ls5000_attach(const char *dev)
 	return ls5000_open(dev, NULL);
 }
 
-SANE_Status sane_ls5000_get_devices(const SANE_Device ***list, SANE_Bool local_only)
+SANE_Status sane_ls5000_get_devices(const SANE_Device ***list,
+				    SANE_Bool local_only)
 {
 	(void)local_only; /* shut up compiler */
 
@@ -1294,10 +1296,10 @@ SANE_Status sane_ls5000_get_devices(const SANE_Device ***list, SANE_Bool local_o
 	return SANE_STATUS_GOOD;
 }
 
-SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle * h)
+SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 {
 	SANE_Status status;
-	ls5000_t *s;
+	struct ls5000 *s;
 	int i_option;
 	unsigned int i_list;
 	SANE_Option_Descriptor o;
@@ -1324,9 +1326,7 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle * h)
 	/* option descriptors */
 
 	for (i_option = 0; i_option < LS5000_N_OPTIONS; i_option++) {
-		o.name = o.title = o.desc = NULL;
-		o.type = o.unit = o.cap = o.constraint_type = o.size = 0;
-		o.constraint.range = NULL;	/* only one union member needs to be NULLed */
+		memset(&o, 0, sizeof(o));
 		switch (i_option) {
 		case LS5000_OPTION_NUM:
 			o.name = "";
@@ -1779,7 +1779,7 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle * h)
 
 void sane_ls5000_close(SANE_Handle h)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 
 	ls5000_close(s);
 }
@@ -1787,7 +1787,7 @@ void sane_ls5000_close(SANE_Handle h)
 const SANE_Option_Descriptor *
 sane_ls5000_get_option_descriptor(SANE_Handle h, SANE_Int n)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 
 	if ((n >= 0) && (n < LS5000_N_OPTIONS))
 		return &s->option_list[n];
@@ -1796,9 +1796,9 @@ sane_ls5000_get_option_descriptor(SANE_Handle h, SANE_Int n)
 }
 
 static SANE_Status
-ls5000_get_option_value(ls5000_t *s, SANE_Int option, void *v)
+ls5000_get_option_value(struct ls5000 *s, SANE_Int option, void *v)
 {
-	ls5000_pixel_t pixel;
+	ls5000_pixel pixel;
 
 	switch (option) {
 	case LS5000_OPTION_NUM:
@@ -1905,9 +1905,9 @@ ls5000_get_option_value(ls5000_t *s, SANE_Int option, void *v)
 }
 
 static SANE_Status
-ls5000_set_option_value(ls5000_t *s, SANE_Int option, void *v, int *flags)
+ls5000_set_option_value(struct ls5000 *s, SANE_Int option, void *v, int *flags)
 {
-	ls5000_pixel_t pixel;
+	ls5000_pixel pixel;
 	SANE_Option_Descriptor o = s->option_list[option];
 	SANE_Status status = SANE_STATUS_GOOD;
 
@@ -2110,7 +2110,7 @@ SANE_Status
 sane_ls5000_control_option(SANE_Handle h, SANE_Int option, SANE_Action action,
 			   void *v, SANE_Int *outflags)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 	SANE_Int *flags, dummyflags = 0;
 
 	if (option >= LS5000_N_OPTIONS)
@@ -2133,7 +2133,7 @@ sane_ls5000_control_option(SANE_Handle h, SANE_Int option, SANE_Action action,
 
 SANE_Status sane_ls5000_get_parameters(SANE_Handle h, SANE_Parameters *p)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 
 	ls5000_convert_options(s);
 
@@ -2161,7 +2161,7 @@ SANE_Status sane_ls5000_get_parameters(SANE_Handle h, SANE_Parameters *p)
 
 SANE_Status sane_ls5000_start(SANE_Handle h)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 	SANE_Status status;
 
 	if (s->must_read_now)
@@ -2190,7 +2190,7 @@ SANE_Status sane_ls5000_start(SANE_Handle h)
  * This function does the bulk of the data format conversion,
  * see the comment for sane_ls5000_read.
  */
-static void ls5000_shuffle_block(ls5000_t *s, int block_lines)
+static void ls5000_shuffle_block(struct ls5000 *s, int block_lines)
 {
 	int line, i;
 	int line_padded = s->line_bytes + s->line_padding;
@@ -2275,7 +2275,7 @@ static void ls5000_shuffle_block(ls5000_t *s, int block_lines)
 SANE_Status
 sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 	SANE_Status status;
 	unsigned long xfer_len;
 	size_t n_recv, remaining, offset;
@@ -2485,7 +2485,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 
 void sane_ls5000_cancel(SANE_Handle h)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 
 	if (s->scan_stage == LS5000_SCAN_STAGE_ACQUIRE) {
 		ls5000_issue_cmd(s, 0, LS5000_CMD_ABORT, 0, 0, 0, 0, 0);
@@ -2515,7 +2515,7 @@ SANE_Status sane_ls5000_set_io_mode(SANE_Handle h, SANE_Bool m)
 
 SANE_Status sane_ls5000_get_select_fd(SANE_Handle h, SANE_Int * fd)
 {
-	ls5000_t *s = (ls5000_t *) h;
+	struct ls5000 *s = (struct ls5000 *) h;
 	(void)fd;
 	(void)s;
 
