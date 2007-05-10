@@ -1401,12 +1401,11 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 			o.type = SANE_TYPE_STRING;
 			o.size = 100;
 			o.constraint_type = SANE_CONSTRAINT_STRING_LIST;
-			str_list = malloc(3*sizeof(char *));
+			str_list = calloc(3, sizeof(char *));
 			if (!str_list)
 				goto error;
 			str_list[0] = SANE_VALUE_SCAN_MODE_COLOR;
 			str_list[1] = SANE_VALUE_SCAN_MODE_GRAY;
-			str_list[2] = NULL;
 			o.constraint.string_list = str_list;
 			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT;
 			break;
