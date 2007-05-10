@@ -250,7 +250,11 @@ static enum ls5000_phase ls5000_phase_check(struct ls5000 *s)
 	SANE_Byte phase_recv_buf[1];
 	SANE_Status status = 0;
 	size_t n = 1;
-	static char *phases[] = { "NO", "STATUS IN", "DATA OUT", "DATA IN", "BUSY", };
+	static char *phases[] = { "NO",
+				  "STATUS IN",
+				  "DATA OUT",
+				  "DATA IN",
+				  "BUSY", };
 	char *phase = "UNKNOWN";
 
 	DBG(20, "PHASE_CHECK\n");
@@ -276,7 +280,9 @@ static SANE_Status ls5000_parse_status(struct ls5000 *s)
 		DBG(20, "STATUS: CHECK CONDITION, %02lx-%02lx-%02lx-%02lx\n\n",
 		    s->sense_key, s->sense_asc, s->sense_ascq, s->sense_info);
 
-	if (s->sense_key == 0x09 && s->sense_asc == 0x80 && s->sense_ascq == 0x06 &&
+	if (s->sense_key == 0x09 &&
+	    s->sense_asc == 0x80 &&
+	    s->sense_ascq == 0x06 &&
 	    (s->sense_info == 0 || s->sense_info == 1)) {
 		s->status = LS5000_STATUS_REISSUE;
 		return SANE_STATUS_GOOD;
@@ -303,7 +309,8 @@ static SANE_Status ls5000_check_status(struct ls5000 *s)
 	n_status = 8;
 	sanei_usb_read_bulk(s->fd, status_buf, &n_status);
 	if (n_status != 8) {
-		DBG(4, "ls5000_check_status: Failed to read 8 status bytes from USB.\n");
+		DBG(4, "ls5000_check_status: Failed to read 8"
+			" status bytes from USB.\n");
 		return SANE_STATUS_IO_ERROR;
 	}
 	s->sense_key = status_buf[1] & 0x0f;
@@ -325,6 +332,7 @@ static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
 	int status_only = 0;
 	char cmdbuf[10000];
 	char *cmd;
+	int i, pos, l;
 
 	switch (send_buf[0]) {
 	case LS5000_CMD_TEST_UNIT_READY: cmd = "TEST_UNIT_READY"; break;
@@ -375,8 +383,8 @@ static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
 		n_cmd = 10;
 		break;
 	default:
-		DBG(1, "BUG: ls5000_issue_cmd: Unknown command opcode 0x%02x.\n",
-		    send_buf[0]);
+		DBG(1, "BUG: ls5000_issue_cmd: Unknown"
+			" command opcode 0x%02x.\n", send_buf[0]);
 		break;
 	}
 
@@ -386,7 +394,7 @@ static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
 	}
 
 	if (n_recv != 0 && (n_send - n_cmd > 0)) {
-		DBG(1, "BUG: ls5000_issue_cmd: Both data in and data out requested.\n");
+		DBG(1, "BUG: ls5000_issue_cmd: Data in and out requested!\n");
 		return SANE_STATUS_INVAL;
 	}
 
@@ -406,39 +414,52 @@ static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
 	switch (ls5000_phase_check(s)) {
 	case LS5000_PHASE_OUT:
 		if (n_send - n_cmd == 0) {
-			DBG(4, "Error: ls5000_issue_cmd: Unexpected data out phase.\n");
+			DBG(4, "Error: ls5000_issue_cmd: "
+				"Unexpected data out phase.\n");
 			return SANE_STATUS_IO_ERROR;
 		}
 		n_written = n_send - n_cmd;
-		status = sanei_usb_write_bulk(s->fd, send_buf + n_cmd, &n_written);
+		status = sanei_usb_write_bulk(s->fd,
+					      send_buf + n_cmd,
+					      &n_written);
 		if (n_written != n_send - n_cmd) {
-			DBG(4, "Error: ls5000_issue_cmd: scanner only took %d bytes\n", n_written);
+			DBG(4, "Error: ls5000_issue_cmd: "
+				"scanner only took %d bytes\n", n_written);
 			return SANE_STATUS_IO_ERROR;
 		}
-		{
-		int i, pos=0,l;
+		pos = 0;
 		snprintf(cmdbuf, sizeof(cmdbuf), "%s_DATA:", cmd);
-		l=strlen(cmdbuf);
-		for (i=0;(i<n_written) && (sizeof(cmdbuf)-pos>3);i++,pos+=3)
-			snprintf(cmdbuf+l+pos, sizeof(cmdbuf)-pos, " %.2x", (send_buf + n_cmd)[i]);
-		DBG(20, "%s\n", cmdbuf);
+		l = strlen(cmdbuf);
+		for (i = 0; i < n_written; i++) {
+			snprintf(cmdbuf + l + pos, sizeof(cmdbuf) - pos,
+				 " %.2x", (send_buf + n_cmd)[i]);
+			pos += 3;
+			if (sizeof(cmdbuf) - pos > 3) {
+				DBG(20, "the following data was truncated\n");
+				break;
+			}
 		}
+		DBG(20, "%s\n", cmdbuf);
 		break;
 	case LS5000_PHASE_IN:
 		if (n_recv == 0) {
-			DBG(4, "Error: ls5000_issue_cmd: Unexpected data in phase.\n");
+			DBG(4, "Error: ls5000_issue_cmd: "
+				"Unexpected data in phase.\n");
 			return SANE_STATUS_IO_ERROR;
 		}
 		if (n_recv < 0)
 			return SANE_STATUS_DEVICE_BUSY;
-		status = sanei_usb_read_bulk(s->fd, s->recv_buf, (size_t*)&n_recv);
+		status = sanei_usb_read_bulk(s->fd,
+					     s->recv_buf,
+					     (size_t*) &n_recv);
 		break;
 	case LS5000_PHASE_NONE:
 		DBG(4, "Error: ls5000_issue_cmd: No command received!\n");
 		return SANE_STATUS_IO_ERROR;
 	default:
 		if (n_recv) {
-			DBG(4, "Error: ls5000_issue_cmd: Unexpected non-data phase, but n_recv != 0.\n");
+			DBG(4, "Error: ls5000_issue_cmd: "
+				"Unexpected non-data phase.\n");
 			status_only = 1;
 		}
 		break;
@@ -618,7 +639,9 @@ static SANE_Status ls5000_autofocus(struct ls5000 *s)
 		real_focusy = s->real_yoffset + s->real_height / 2;
 	} else {
 		real_focusx = s->focusx;
-		real_focusy = s->focusy + (s->i_frame - 1) * s->frame_offset + s->subframe / s->unit_mm;
+		real_focusy = s->focusy +
+			      (s->i_frame - 1) * s->frame_offset +
+			      s->subframe / s->unit_mm;
 	}
 
 	DBG(20, "AUTOFOCUS\n");
@@ -791,11 +814,11 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				(s->real_xoffset >> 24) & 0xff,
 				(s->real_xoffset >> 16) & 0xff,
 				(s->real_xoffset >> 8) & 0xff,
-				s->real_xoffset & 0xff, /* Upper Left X offset */
+				s->real_xoffset & 0xff, /* Upper Left X offs */
 				(s->real_yoffset >> 24) & 0xff,
 				(s->real_yoffset >> 16) & 0xff,
 				(s->real_yoffset >> 8) & 0xff,
-				s->real_yoffset & 0xff, /* Upper Left Y offset */
+				s->real_yoffset & 0xff, /* Upper Left Y offs */
 				(s->real_width >> 24) & 0xff,
 				(s->real_width >> 16) & 0xff,
 				(s->real_width >> 8) & 0xff,
@@ -807,7 +830,8 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				0,		/* brightness */
 				0,		/* threshold */
 				0,		/* contrast */
-				s->gray_scan?2:5,/* image composition: rgb/gray */
+				/* image composition: rgb or gray */
+				s->gray_scan ? 2 : 5,
 				16,		/* pixel composition */
 				0, 0,		/* halftone pattern */
 				0,		/* reserved, padding type */
@@ -816,10 +840,12 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				0, 0, 0,
 				0, 0, 0,	/* reserved */
 				0,		/* multiread, color ordering */
-				0 | (s->negative ? 0 : 1), /* averaging, pos/neg */
+				/* averaging (top 4 bits), pos/neg (bit 0) */
+				0 | (s->negative ? 0 : 1),
 				scan_kind,	/* scanning kind */
-				0x02,		/* scanning mode (normal quality) */
-				0x02,		/* colour interleaving (line w/o ccd distance) */
+				0x02,		/* scanning mode (normal) */
+				/* colour interleaving (line-interleaving) */
+				0x02,
 				0xff,		/* auto exposure target */
 				exp_b0,
 				exp_b1,
@@ -840,7 +866,7 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				LS5000_CMD_SCAN,
 				0,		/* LUN */
 				0, 0,		/* reserved */
-				1,		/* transfer length (#windows) */
+				1,		/* transfer len (#windows) */
 				0,		/* control */
 				1);		/* windows: red */
 		break;
@@ -858,7 +884,7 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				LS5000_CMD_SCAN,
 				0,		/* LUN */
 				0, 0,		/* reserved */
-				3,		/* transfer length (#windows) */
+				3,		/* transfer len (#windows) */
 				0,		/* control */
 				1, 2, 3);	/* windows: red,green,blue */
 		break;
@@ -867,19 +893,21 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 				LS5000_CMD_SCAN,
 				0,		/* LUN */
 				0, 0,		/* reserved */
-				4,		/* transfer length (#windows) */
+				4,		/* transfer len (#windows) */
 				0,		/* control */
 				1, 2, 3, 9);	/* windows: red,green,blue,ir */
 		break;
 	default:
-		DBG(1, "BUG: ls5000_scan: Unknown number of input colours (%d).\n", n_colour);
+		DBG(1, "BUG: ls5000_scan: "
+			"Unknown number of input colours (%d).\n", n_colour);
 		break;
 	}
 	if (s->status == LS5000_STATUS_REISSUE) {
 		status = ls5000_issue_cmd(s, 6,
 				LS5000_CMD_READ,
 				0,		/* LUN */
-				0x87,		/* Initiator cooperative action parameter */
+				0x87,		/* Initiator cooperative
+						   action parameter */
 				0,		/* reserved */
 				0, 0,		/* data type qualifier */
 				0, 0, 6,	/* transfer length */
@@ -895,7 +923,8 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 		status = ls5000_issue_cmd(s, s->recv_buf[5] + 6,
 				LS5000_CMD_READ,
 				0,		/* LUN */
-				0x87,		/* Initiator cooperative action parameter */
+				0x87,		/* Initiator cooperative
+						   action parameter */
 				0,		/* reserved */
 				0, 0,		/* data type qualifier */
 				0, 0, s->recv_buf[5] + 6, /* transfer length */
@@ -910,7 +939,8 @@ static SANE_Status ls5000_scan(struct ls5000 *s, enum ls5000_scan type)
 		 *	6-: data
 		 */
 		if ((s->recv_buf[11] != 0x08) || (s->recv_buf[12] != 0x00))
-			DBG(1, "BUG: ls5000_scan: Unexpected line_padding position.\n");
+			DBG(1, "BUG: ls5000_scan: "
+				"Unexpected line_padding position.\n");
 		s->line_padding = 256 * s->recv_buf[19] + s->recv_buf[20];
 		goto scan;
 	}
@@ -947,8 +977,9 @@ static SANE_Status ls5000_page_inquiry(struct ls5000 *s, int page)
 				4,		/* size */
 				0);		/* control */
 		if (status) {
-			DBG(4, "Error: ls5000_page_inquiry: retrieving size of page 0x%x failed: %s.\n",
-			    page, sane_strstatus(status));
+			DBG(4, "Error: ls5000_page_inquiry: "
+			    	"retrieving size of page 0x%x failed: %s.\n",
+				page, sane_strstatus(status));
 			return status;
 		}
 		/* the required length is at byte 3 (w/o header len) */
@@ -1029,8 +1060,9 @@ ls5000_open(const char *device, struct ls5000 **sp)
 	strncpy(s->revision_string, (char*)s->recv_buf + 32, 4);
 	s->revision_string[4] = '\0';
 
-	DBG(10, "ls5000_open: Inquiry reveals: vendor = '%s', product = '%s', revision = '%s'.\n",
-	    s->vendor_string, s->product_string, s->revision_string);
+	DBG(10, "ls5000_open: Inquiry: vendor = '%s', "
+		"product = '%s', revision = '%s'.\n",
+		s->vendor_string, s->product_string, s->revision_string);
 
 	if (strncmp(s->product_string, "LS-5000 ED      ", 16) != 0) {
 		ls5000_close(s);
@@ -1042,7 +1074,8 @@ ls5000_open(const char *device, struct ls5000 **sp)
 		return SANE_STATUS_GOOD;
 	}
 
-	device_list_new = realloc(device_list, (n_device_list + 2) * sizeof(SANE_Device *));
+	device_list_new = realloc(device_list,
+				  (n_device_list + 2) * sizeof(SANE_Device *));
 	if (!device_list_new)
 		return SANE_STATUS_NO_MEM;
 	device_list = device_list_new;
@@ -1102,7 +1135,8 @@ static SANE_Status ls5000_full_inquiry(struct ls5000 *s)
 		s->lut_r = realloc(s->lut_r, s->n_lut * sizeof(ls5000_pixel));
 		s->lut_g = realloc(s->lut_g, s->n_lut * sizeof(ls5000_pixel));
 		s->lut_b = realloc(s->lut_b, s->n_lut * sizeof(ls5000_pixel));
-		s->lut_neutral = realloc(s->lut_neutral, s->n_lut * sizeof(ls5000_pixel));
+		s->lut_neutral = realloc(s->lut_neutral,
+					 s->n_lut * sizeof(ls5000_pixel));
 
 		if (!s->lut_r || !s->lut_g || !s->lut_b || !s->lut_neutral) {
 			free(s->lut_r);
@@ -1112,9 +1146,12 @@ static SANE_Status ls5000_full_inquiry(struct ls5000 *s)
 			return SANE_STATUS_NO_MEM;
 		}
 
-		for (pixel = 0; pixel < s->n_lut; pixel++)
-			s->lut_r[pixel] = s->lut_g[pixel] = s->lut_b[pixel] =
-			    s->lut_neutral[pixel] = pixel;
+		for (pixel = 0; pixel < s->n_lut; pixel++) {
+			s->lut_r[pixel] = pixel;
+			s->lut_g[pixel] = pixel;
+			s->lut_b[pixel] = pixel;
+			s->lut_neutral[pixel] = pixel;
+		}
 	} else {
 		free(s->lut_r);
 		free(s->lut_g);
@@ -1267,29 +1304,15 @@ SANE_Status sane_ls5000_get_devices(const SANE_Device ***list,
 {
 	(void)local_only; /* shut up compiler */
 
-	if (device_list)
-		DBG(6, "sane_ls5000_get_devices: Device list already populated, not probing again.\n");
-	else {
-		if (open_devices) {
-			DBG(4, "sane_ls5000_get_devices: Devices open, not scanning for scanners.\n");
-			return SANE_STATUS_IO_ERROR;
-		}
-
-		sanei_usb_attach_matching_devices("usb 0x04b0 0x4002", ls5000_attach);
-
-		switch (n_device_list) {
-		case 0:
-			DBG(6, "sane_ls5000_get_devices: No devices detected.\n");
-			break;
-		case 1:
-			DBG(6, "sane_ls5000_get_devices: 1 device detected.\n");
-			break;
-		default:
-			DBG(6, "sane_ls5000_get_devices: %i devices detected.\n",
-			    n_device_list);
-			break;
-		}
+	if (device_list) {
+		*list = (const SANE_Device **)device_list;
+		return SANE_STATUS_GOOD;
 	}
+
+	if (open_devices)
+		return SANE_STATUS_IO_ERROR;
+
+	sanei_usb_attach_matching_devices("usb 0x04b0 0x4002", ls5000_attach);
 
 	*list = (const SANE_Device **)device_list;
 
@@ -1360,7 +1383,8 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 			o.desc = "Negative film: make scanner invert colours";
 			o.type = SANE_TYPE_BOOL;
 			o.size = sizeof(SANE_Word);
-			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT | SANE_CAP_INACTIVE;
+			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT |
+				SANE_CAP_INACTIVE;
 			break;
 		case LS5000_OPTION_INFRARED:
 			o.name = "infrared";
@@ -1526,7 +1550,8 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 		case LS5000_OPTION_INQUIRE:
 			o.name = "inquire";
 			o.title = "Inquire scanner";
-			o.desc = "Inquire scanner status (attached adapter etc.)";
+			o.desc = "Inquire scanner status "
+				 "(attached adapter etc.)";
 			o.type = SANE_TYPE_BUTTON;
 			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT;
 			break;
@@ -1539,7 +1564,8 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 			o.size = sizeof(SANE_Word);
 			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT;
 			o.constraint_type = SANE_CONSTRAINT_WORD_LIST;
-			word_list = malloc((s->res_n_list + 1) * sizeof(SANE_Word));
+			word_list = calloc(s->res_n_list + 1,
+					   sizeof(SANE_Word));
 			if (!word_list)
 				goto error;
 			for (i_list = 0; i_list < s->res_n_list; i_list++)
@@ -1550,7 +1576,7 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 		case LS5000_OPTION_FRAME:
 			o.name = "frame";
 			o.title = "Frame number";
-			o.desc = "Number of frame to be scanned, starting with 1";
+			o.desc = "Number of frame to be scanned";
 			o.type = SANE_TYPE_INT;
 			o.unit = SANE_UNIT_NONE;
 			o.size = sizeof(SANE_Word);
@@ -1659,8 +1685,8 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 		case LS5000_OPTION_FOCUS_ON_CENTRE:
 			o.name = "focus-on-centre";
 			o.title = "Use centre of scan area as AF point";
-			o.desc =
-			    "Use centre of scan area as AF point instead of manual AF point selection";
+			o.desc = "Use centre of scan area as AF point "
+				 "instead of manual AF point selection";
 			o.type = SANE_TYPE_BOOL;
 			o.size = sizeof(SANE_Word);
 			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT;
@@ -1737,13 +1763,10 @@ SANE_Status sane_ls5000_open(SANE_String_Const name, SANE_Handle *h)
 		case LS5000_OPTION_SCAN_AE_WB:
 			o.name = "ae-wb";
 			o.title = "Auto-exposure scan with white balance now";
-			o.desc = "Perform auto-exposure scan with white balance";
+			o.desc = "Perform auto-exposure scan "
+				 "with white balance";
 			o.type = SANE_TYPE_BUTTON;
 			o.cap = SANE_CAP_SOFT_SELECT | SANE_CAP_SOFT_DETECT;
-			break;
-		default:
-			DBG(1, "BUG: sane_ls5000_open: Unknown option number.\n");
-			return SANE_STATUS_INVAL;
 			break;
 		}
 		s->option_list[i_option] = o;
@@ -1913,6 +1936,7 @@ ls5000_set_option_value(struct ls5000 *s, SANE_Int option, void *v, int *flags)
 
 	if (s->scan_stage != LS5000_SCAN_STAGE_IDLE)
 		return SANE_STATUS_INVAL;
+
 	/* XXX do this for all elements of arrays */
 	switch (o.type) {
 	case SANE_TYPE_BOOL:
@@ -2054,11 +2078,15 @@ ls5000_set_option_value(struct ls5000 *s, SANE_Int option, void *v, int *flags)
 	case LS5000_OPTION_FOCUS_ON_CENTRE:
 		s->focus_on_centre = *(SANE_Word *) v;
 		if (s->focus_on_centre) {
-			s->option_list[LS5000_OPTION_FOCUSX].cap |= SANE_CAP_INACTIVE;
-			s->option_list[LS5000_OPTION_FOCUSY].cap |= SANE_CAP_INACTIVE;
+			s->option_list[LS5000_OPTION_FOCUSX].cap |=
+				SANE_CAP_INACTIVE;
+			s->option_list[LS5000_OPTION_FOCUSY].cap |=
+				SANE_CAP_INACTIVE;
 		} else {
-			s->option_list[LS5000_OPTION_FOCUSX].cap &= ~SANE_CAP_INACTIVE;
-			s->option_list[LS5000_OPTION_FOCUSY].cap &= ~SANE_CAP_INACTIVE;
+			s->option_list[LS5000_OPTION_FOCUSX].cap &=
+				~SANE_CAP_INACTIVE;
+			s->option_list[LS5000_OPTION_FOCUSY].cap &=
+				~SANE_CAP_INACTIVE;
 		}
 		*flags |= SANE_INFO_RELOAD_OPTIONS;
 		break;
@@ -2206,8 +2234,10 @@ static void ls5000_shuffle_block(struct ls5000 *s, int block_lines)
 		 * for little gain.
 		 */
 		for (line = 0; line < block_lines; line++) {
-			uint16_t *src = (uint16_t*)s->block + line*line_padded/2;
-			uint16_t *graydst = (uint16_t*)s->ordered_block + line*line_pixels;
+			uint16_t *src = (uint16_t*)s->block +
+					line*line_padded/2;
+			uint16_t *graydst = (uint16_t*)s->ordered_block +
+					    line*line_pixels;
 			uint16_t *irsrc = src + line_pixels;
 			uint16_t *irdst = (uint16_t*)s->ir_data +
 					  (s->line + line)*s->logical_width;
@@ -2230,8 +2260,10 @@ static void ls5000_shuffle_block(struct ls5000 *s, int block_lines)
 		 * components.
 		 */
 		for (line = 0; line < block_lines; line++) {
-			uint16_t *src = (uint16_t*)s->block + line*line_padded/2;
-			uint16_t *rgbdst = (uint16_t*)s->ordered_block + line*3*line_pixels;
+			uint16_t *src = (uint16_t*)s->block +
+					line*line_padded/2;
+			uint16_t *rgb = (uint16_t*)s->ordered_block +
+					line*3*line_pixels;
 			uint16_t *irsrc = src + 3*line_pixels;
 			uint16_t *irdst = (uint16_t*)s->ir_data +
 					  (s->line + line)*s->logical_width;
@@ -2243,9 +2275,9 @@ static void ls5000_shuffle_block(struct ls5000 *s, int block_lines)
 					irdst[i] = ntohs(irsrc[i]);
 #endif
 			for (i = 0; i < line_pixels; i++) {
-				rgbdst[i*3 + 0] = ntohs(src[0*line_pixels + i]);
-				rgbdst[i*3 + 1] = ntohs(src[1*line_pixels + i]);
-				rgbdst[i*3 + 2] = ntohs(src[2*line_pixels + i]);
+				rgb[i*3 + 0] = ntohs(src[0*line_pixels + i]);
+				rgb[i*3 + 1] = ntohs(src[1*line_pixels + i]);
+				rgb[i*3 + 2] = ntohs(src[2*line_pixels + i]);
 			}
 		}
 	}
@@ -2319,7 +2351,9 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 * block was read) and we do have a block. This means we're done
 	 * with the gray/rgb part of the image and possibly everything.
 	 */
-	if (s->line == s->logical_height && s->block_read_pos == 0 && s->block) {
+	if (s->line == s->logical_height &&
+	    s->block_read_pos == 0 &&
+	    s->block) {
 		*len = 0;
 		free(s->block);
 		s->block = NULL;
@@ -2340,13 +2374,15 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 */
 	if (s->line == 0 && s->block_read_pos == 0) {
 		/* store how many bytes for each scanline */
-		s->line_bytes = (colors + !!s->infrared) * s->logical_width * 2;
+		s->line_bytes = (colors + !!s->infrared) *
+				s->logical_width * 2;
 		/*
 		 * lines are padded to multiples of 512, we have received the
 		 * required line padding when the REISSUE status comes from the
 		 * scanner.
 		 */
-		xfer_len = s->logical_height * (s->line_bytes + s->line_padding);
+		xfer_len = s->logical_height *
+			   (s->line_bytes + s->line_padding);
 		/*
 		 * Allocate memory for the raw block, the reordered block
 		 * for the frontend and the infrared data. We could be faster
@@ -2397,7 +2433,8 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 				0,		/* LUN */
 				0,		/* data type: image */
 				0,		/* reserved */
-				0, 1,		/* data type qualifier: default, 2-byte data */
+				0, 1,		/* data type qualifier
+						   (default, 2-byte data) */
 				(remaining >> 16) & 0xff,
 				(remaining >> 8) & 0xff,
 				(remaining >> 0) & 0xff, /* transfer length */
