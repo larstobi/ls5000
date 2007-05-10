@@ -228,7 +228,6 @@ typedef struct {
 	ls5000_scan_stage_t scan_stage;
 	unsigned long sense_key, sense_asc, sense_ascq, sense_info;
 	int status;
-	unsigned long read_remaining;
 	SANE_Bool must_read_now;
 
 	/* SANE stuff */
@@ -2316,15 +2315,17 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	}
 
 	/*
-	 * No more data to read, block read position is 0 (i.e. the whole
+	 * No more lines to read, block read position is 0 (i.e. the whole
 	 * block was read) and we do have a block. This means we're done
 	 * with the gray/rgb part of the image and possibly everything.
 	 */
-	if (s->read_remaining == 0 && s->block_read_pos == 0 && s->block) {
+	if (s->line == s->logical_height && s->block_read_pos == 0 && s->block) {
 		*len = 0;
 		free(s->block);
-		free(s->ordered_block);
 		s->block = NULL;
+		free(s->ordered_block);
+		s->ordered_block = NULL;
+		s->line = 0;
 		s->must_read_now = SANE_FALSE;
 		/* scanimage doesn't call sane_ls5000_cancel between pages */
 		s->scan_stage = LS5000_SCAN_STAGE_IDLE;
@@ -2337,9 +2338,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 * for the first time after that and should calculate how much data we
 	 * need to read and allocate memory as necessary.
 	 */
-	if (s->read_remaining == 0 && s->block_read_pos == 0) {
-		/* current line */
-		s->line = 0;
+	if (s->line == 0 && s->block_read_pos == 0) {
 		/* store how many bytes for each scanline */
 		s->line_bytes = (colors + !!s->infrared) * s->logical_width * 2;
 		/*
@@ -2348,8 +2347,6 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * scanner.
 		 */
 		xfer_len = s->logical_height * (s->line_bytes + s->line_padding);
-		/* Now we need to read all those bytes (unless we abort) */
-		s->read_remaining = xfer_len;
 		/*
 		 * Allocate memory for the raw block, the reordered block
 		 * for the frontend and the infrared data. We could be faster
@@ -2366,6 +2363,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 			return SANE_STATUS_NO_MEM;
 		if (s->infrared) {
 			s->ir_data = malloc(s->logical_height * s->logical_width * 2);
+			s->ir_data_len = 0;
 			if (!s->ir_data)
 				return SANE_STATUS_NO_MEM;
 		}
@@ -2384,13 +2382,10 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * for optimal performance.
 		 */
 		s->block_lines = 10;
+		if (s->block_lines > s->logical_height - s->line)
+			s->block_lines = s->logical_height - s->line;
 		/* calculate how many bytes that means */
 		remaining = s->block_lines * (s->line_bytes + s->line_padding);
-		/* whoops, not that many lines any more! */
-		if (remaining > s->read_remaining) {
-			remaining = s->read_remaining;
-			s->block_lines = s->read_remaining / (s->line_bytes + s->line_padding);
-		}
 		/* issue the read command */
 		status = ls5000_issue_cmd(s, -1,
 				LS5000_CMD_READ,
@@ -2403,9 +2398,14 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 				(remaining >> 0) & 0xff, /* transfer length */
 				0x80);	/* control */
 		if (status != SANE_STATUS_DEVICE_BUSY) {
-			/* XXX reset all the other state too */
 			*len = 0;
+			s->block_read_pos = 0;
 			s->must_read_now = SANE_FALSE;
+			s->line = 0;
+			free(s->block);
+			s->block = NULL;
+			free(s->ordered_block);
+			s->ordered_block = NULL;
 			return status;
 		}
 
@@ -2423,15 +2423,18 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 			offset += n_recv;
 			remaining -= n_recv;
 		}
-		/* we successfully read one full block */
-		s->read_remaining -= offset;
 
 		/* each command requires a status check afterwards */
 		status = ls5000_check_status(s);
 		if (status) {
-			/* XXX reset state */
 			*len = 0;
+			s->block_read_pos = 0;
 			s->must_read_now = SANE_FALSE;
+			s->line = 0;
+			free(s->block);
+			s->block = NULL;
+			free(s->ordered_block);
+			s->ordered_block = NULL;
 			return status;
 		}
 		/*
@@ -2479,10 +2482,19 @@ void sane_ls5000_cancel(SANE_Handle h)
 {
 	ls5000_t *s = (ls5000_t *) h;
 
-	if (s->scan_stage == LS5000_SCAN_STAGE_ACQUIRE)
+	if (s->scan_stage == LS5000_SCAN_STAGE_ACQUIRE) {
 		ls5000_issue_cmd(s, 0, LS5000_CMD_ABORT, 0, 0, 0, 0, 0);
+		free(s->ir_data);
+		s->ir_data = NULL;
+		free(s->block);
+		s->block = NULL;
+		free(s->ordered_block);
+		s->ordered_block = NULL;
+	}
 
 	s->block_read_pos = 0;
+	s->line = 0;
+	s->must_read_now = SANE_FALSE;
 	s->scan_stage = LS5000_SCAN_STAGE_IDLE;
 }
 
