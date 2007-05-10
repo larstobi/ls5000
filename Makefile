@@ -1,7 +1,7 @@
 CFLAGS=-g3 -O2 -Wall -fPIC
 
 ls5000.so: ls5000.o sanei_usb.o debug.o config.h
-	$(CC) -shared -o $@ -Wl,-soname,$@ -fPIC -lc $^
+	$(CC) -shared -o $@ -Wl,-soname,$@ -lc $^
 
 *.o:	config.h
 

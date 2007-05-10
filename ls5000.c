@@ -588,7 +588,7 @@ static SANE_Status ls5000_focus(ls5000_t *s)
 	status = ls5000_issue_cmd(s, 0,
 			LS5000_CMD_SET_PARAM,
 			0,		/* LUN */
-			0xc1,		/* Operation "Focus" */
+			0xc1,		/* Operation "Focus move" */
 			0, 0, 0,	/* reserved */
 			0, 0, 13,	/* parameter length */
 			0,		/* ctrl */
@@ -607,7 +607,7 @@ static SANE_Status ls5000_focus(ls5000_t *s)
 static SANE_Status ls5000_autofocus(ls5000_t *s)
 {
 	SANE_Status status;
-	int real_focusx, real_focusy;
+	int real_focusx, real_focusy, tmo = 15, stat;
 
 	ls5000_convert_options(s);
 
@@ -639,6 +639,15 @@ static SANE_Status ls5000_autofocus(ls5000_t *s)
 			0, 0, 0, 0);	/* dummy */
 	if (status)
 		return status;
+
+	stat = ls5000_get_status(s);
+	while (stat == LS5000_BECOMING_READY) {
+		usleep(500000);
+		stat = ls5000_get_status(s);
+		if (!tmo--)
+			return SANE_STATUS_IO_ERROR;
+	}
+
 
 	status = ls5000_execute(s);
 	if (status)
@@ -680,9 +689,6 @@ static SANE_Status ls5000_get_exposure(ls5000_t *s)
 		s->real_exposure[i_colour] =
 		    65536 * (256 * s->recv_buf[54] + s->recv_buf[55]) +
 		    256 * s->recv_buf[56] + s->recv_buf[57];
-
-		DBG(6, "ls5000_get_exposure: exposure for colour %i: %li * 10ns\n",
-		    i_colour, s->real_exposure[i_colour]);
 	}
 
 	return SANE_STATUS_GOOD;
@@ -821,7 +827,9 @@ static SANE_Status ls5000_scan(ls5000_t *s, ls5000_scan_t type)
 			return status;
 	}
 
-	ls5000_focus(s);
+	status = ls5000_focus(s);
+	if (status)
+		return status;
 
  scan:
 	switch (n_colour) {
