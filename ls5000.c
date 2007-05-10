@@ -1,8 +1,5 @@
 /*
- *   SANE - Scanner Access Now Easy.
- *   ls5000.c
- *
- *   This file is part of the SANE package.
+ *   ls5000.c - Coolscan 5000 ED SANE backend
  *
  *   This program is free software; you can redistribute it and/or
  *   modify it under the terms of the GNU General Public License as
