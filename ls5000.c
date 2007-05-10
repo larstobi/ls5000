@@ -66,6 +66,9 @@
 #include "config.h"
 #include "sanei_usb.h"
 
+/* parameters */
+#define NUM_LINES_READ 10
+
 /* typedefs */
 
 #define free(p) free((void*)p)
@@ -2278,8 +2281,6 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	size_t n_recv, remaining, offset;
 	int colors, block_lines;
 
-	*len = 0;
-
 	/* colors without infrared */
 	colors = 3;
 	if (s->gray_scan)
@@ -2354,15 +2355,20 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * from the scanner to speed up the scanner that would increase
 		 * code complexity a lot.
 		 */
-		s->block = malloc(10 * (s->line_bytes + s->line_padding));
+		s->block = malloc(NUM_LINES_READ *
+				  (s->line_bytes + s->line_padding));
 		if (!s->block)
 			return SANE_STATUS_NO_MEM;
-		s->ordered_block = malloc(10 * (s->line_bytes + s->line_padding));
+
+		s->ordered_block = malloc(NUM_LINES_READ * colors *
+					  s->logical_width * 2);
 		if (!s->ordered_block)
 			return SANE_STATUS_NO_MEM;
+
 		if (s->infrared) {
-			s->ir_data = malloc(s->logical_height * s->logical_width * 2);
-			s->ir_data_len = s->logical_height * s->logical_width * 2;
+			s->ir_data_len = s->logical_height *
+					 s->logical_width * 2;
+			s->ir_data = malloc(s->ir_data_len);
 			if (!s->ir_data)
 				return SANE_STATUS_NO_MEM;
 		}
@@ -2380,7 +2386,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 		 * we probably should adjust this based on line length
 		 * for optimal performance.
 		 */
-		block_lines = 10;
+		block_lines = NUM_LINES_READ;
 		if (block_lines > s->logical_height - s->line)
 			block_lines = s->logical_height - s->line;
 		/* calculate how many bytes that means */
