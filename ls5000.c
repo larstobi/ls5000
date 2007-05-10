@@ -2297,7 +2297,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	 * image and now it's the second "scan" to get the IR image.
 	 */
 	if (s->ir_data && s->scan_stage == LS5000_SCAN_STAGE_IDLE) {
-		*len = s->ir_data_len;
+		*len = s->ir_data_len - s->block_read_pos;
 		if (*len == 0) {
 			s->block_read_pos = 0;
 			free(s->ir_data);
@@ -2310,7 +2310,6 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 			*len = maxlen;
 		memcpy(buf, s->ir_data + s->block_read_pos, *len);
 		s->block_read_pos += *len;
-		s->ir_data_len -= *len;
 		return SANE_STATUS_GOOD;
 	}
 
@@ -2363,7 +2362,7 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 			return SANE_STATUS_NO_MEM;
 		if (s->infrared) {
 			s->ir_data = malloc(s->logical_height * s->logical_width * 2);
-			s->ir_data_len = 0;
+			s->ir_data_len = s->logical_height * s->logical_width * 2;
 			if (!s->ir_data)
 				return SANE_STATUS_NO_MEM;
 		}
@@ -2445,10 +2444,6 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 
 		/* we've read a few lines, keep track */
 		s->line += s->block_lines;
-
-		/* we also might have acquired some infrared data */
-		if (s->infrared)
-			s->ir_data_len += s->block_lines * s->logical_width * 2;
 	}
 
 	/*
