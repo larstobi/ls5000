@@ -1,0 +1,2 @@
+libsane-ls5000.so.1 usr/lib/sane
+debian/ls5000.conf etc/sane.d/dll.d

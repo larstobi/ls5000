@@ -1,0 +1,25 @@
+Source: ls5000
+Section: graphics
+Priority: optional
+Maintainer: Johannes Berg <johannes@sipsolutions.net>
+Standards-Version: 3.7.2
+Build-Depends: debhelper (>= 5.0.0), libusb-dev, libsane-dev
+
+Package: ls5000
+Section: graphics
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Nikon Coolscan 5000 ED SANE backend
+ This package contains a SANE backend for the Nikon Coolscan 5000 ED
+ 35mm film scanner.
+
+Package: ls5000-dbg
+Section: graphics
+Architecture: any
+Depends: ls5000
+Description: Nikon Coolscan 5000 ED SANE backend
+ This package contains a SANE backend for the Nikon Coolscan 5000 ED
+ 35mm film scanner.
+ .
+ This contains the debug symbols for the ls5000 SANE backend, useful
+ to debug the cause if the backend crashes.

@@ -1,3 +1,4 @@
 *~
 *.o
 *.so.1
+build-stamp
