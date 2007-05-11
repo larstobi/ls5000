@@ -1,4 +1,4 @@
-CFLAGS = -g3 -O2 -Wall -fPIC
+CFLAGS = -g3 -O2 -Wall -fPIC -W
 
 libsane-ls5000.so.1: ls5000.o sanei_usb.o debug.o config.h
 	$(CC) -lsane -lusb -shared -o $@ -Wl,-soname,$@ $^

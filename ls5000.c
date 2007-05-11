@@ -325,14 +325,14 @@ static SANE_Status ls5000_check_status(struct ls5000 *s)
 	   _ls5000_issue_cmd(s, n_recv, ARRAY_SIZE(data), data);	\
 	})
 static SANE_Status _ls5000_issue_cmd(struct ls5000 *s, int n_recv,
-				     int n_send, SANE_Byte *send_buf)
+				     size_t n_send, SANE_Byte *send_buf)
 {
 	SANE_Status status = SANE_STATUS_INVAL;
-	size_t n_cmd, n_written;
+	size_t n_cmd, n_written, i;
 	int status_only = 0;
 	char cmdbuf[10000];
 	char *cmd;
-	int i, pos, l;
+	int pos, l;
 
 	switch (send_buf[0]) {
 	case LS5000_CMD_TEST_UNIT_READY: cmd = "TEST_UNIT_READY"; break;
@@ -1121,7 +1121,8 @@ ls5000_open(const char *device, struct ls5000 **sp)
 static SANE_Status ls5000_full_inquiry(struct ls5000 *s)
 {
 	SANE_Status status;
-	int pitch, pitch_max, asciilen;
+	int pitch, pitch_max;
+	size_t asciilen;
 	ls5000_pixel pixel;
 
 	status = ls5000_page_inquiry(s, 0xc1);
@@ -2310,7 +2311,8 @@ sane_ls5000_read(SANE_Handle h, SANE_Byte *buf, SANE_Int maxlen, SANE_Int *len)
 	SANE_Status status;
 	unsigned long xfer_len;
 	size_t n_recv, remaining, offset;
-	int colors, block_lines;
+	int colors;
+	unsigned int block_lines;
 
 	/* colors without infrared */
 	colors = 3;
