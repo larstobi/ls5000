@@ -33,7 +33,7 @@ modified for building outside of the SANE source.
 ==============
  * add "ls5000" to /etc/sane/dll.conf (or, on Debian systems,
    create /etc/sane/dll.d/ls5000 with just the string ls5000 in it)
- * copy ls5000.so to /usr/lib/sane/libsane-ls5000.so.1
+ * copy libsane-ls5000.so.1 to /usr/lib/sane/libsane-ls5000.so.1
 
 
  Debugging

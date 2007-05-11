@@ -1,11 +1,11 @@
-CFLAGS=-g3 -O2 -Wall -fPIC
+CFLAGS = -g3 -O2 -Wall -fPIC
 
-ls5000.so: ls5000.o sanei_usb.o debug.o config.h
-	$(CC) -shared -o $@ -Wl,-soname,$@ -lc $^
+libsane-ls5000.so.1: ls5000.o sanei_usb.o debug.o config.h
+	$(CC) -lsane -lusb -shared -o $@ -Wl,-soname,$@ $^
 
 *.o:	config.h
 
 clean:
 	rm -f *.so *.o *~
 
-re:	clean ls5000.so
+re:	clean libsane-ls5000.so.1
