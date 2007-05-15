@@ -63,8 +63,19 @@
 #include <sane/saneopts.h>
 
 #define BACKEND_NAME ls5000
+
+#ifdef V_MAJOR
+/* building inside sane */
+#include "sane/config.h"
+#include "sane/sanei_usb.h"
+#include "sane/sanei_debug.h"
+#else
+/* building standalone */
+#define V_MAJOR 1
+#define V_MINOR 0
 #include "config.h"
 #include "sanei_usb.h"
+#endif
 
 /* parameters */
 #define NUM_LINES_READ 10
@@ -1273,8 +1284,7 @@ SANE_Status sane_ls5000_init(SANE_Int * version_code,
 	DBG_INIT();
 
 	if (version_code)
-		/* XXX V_MAJOR, V_MINOR */
-		*version_code = SANE_VERSION_CODE(1, 0, 0);
+		*version_code = SANE_VERSION_CODE(V_MAJOR, V_MINOR, 0);
 
 	sanei_usb_init();
 
