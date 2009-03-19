@@ -1,0 +1,19 @@
+--- Makefile.orig	2009-01-14 23:16:03.959130379 +0100
++++ Makefile	2009-01-14 23:27:45.852004059 +0100
+@@ -1,5 +1,8 @@
+ CFLAGS = -g3 -O2 -Wall -fPIC -W
+ 
++prefix = /usr
++libsanedir = ${prefix}/lib/sane
++
+ libsane-ls5000.so.1: ls5000.o sanei_usb.o debug.o config.h
+ 	$(CC) -lsane -lusb -shared -o $@ -Wl,-soname,$@ $^
+ 
+@@ -9,3 +12,7 @@
+ 	rm -f libsane-ls5000.so.1 *.o *~
+ 
+ re:	clean libsane-ls5000.so.1
++
++install: libsane-ls5000.so.1
++	mkdir -p $(libsanedir)
++	cp libsane-ls5000.so.1 $(libsanedir)
