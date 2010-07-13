@@ -1,0 +1,45 @@
+
+ ls5000 SANE backend
+=====================
+
+Author: Johannes Berg <johannes@sipsolutions.net>
+Based on coolscan2.c from Andras Major.
+
+
+This is the source code for a SANE backend for the Nikon LS-5000 ED
+(Coolscan 5000 ED) scanner.
+
+The LS-5000 is a 35mm film scanner capable of 4000dpi resolution and
+16-bit colour depth.
+
+The ls5000.c file is based on coolscan2.c from the SANE distribution.
+I have heavily cleaned it up, modernized the code, made it worked with
+the LS-5000 and added a few features. It should be possible to factor
+in support for the other scanners again, but I have not made any attempt
+at it yet since I do now own any such hardware.
+The sanei* files were copied from the SANE distribution and slightly
+modified for building outside of the SANE source.
+
+
+
+ Requirements
+==============
+ * libusb development headers, libsane development headers
+   (libusb-dev/libsane-dev or similar)
+ * a not-too-shabby C compiler
+
+
+ Installation
+==============
+ * add "ls5000" to /etc/sane/dll.conf (or, on Debian systems,
+   create /etc/sane/dll.d/ls5000 with just the string ls5000 in it)
+ * copy libsane-ls5000.so.1 to /usr/lib/sane/libsane-ls5000.so.1
+
+
+ Debugging
+===========
+The ls5000 backend, like most SANE backends, honours the SANE_DEBUG_LS5000
+environment variable. There are various debug levels:
+      1: most obvious bugs
+ 2 - 10: some information
+     20: command trace
